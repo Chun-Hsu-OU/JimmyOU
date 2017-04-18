@@ -1,0 +1,2005 @@
+INCLUDE Irvine32.inc
+
+.data
+sprompt1 BYTE "請輸入出生月份:",0
+sprompt2 BYTE "請輸入出生日期:",0
+prompt1 BYTE "水瓶座(風)",0
+prompt2 BYTE "雙魚座(水)",0
+prompt3 BYTE "牡羊座(火)",0
+prompt4 BYTE "金牛座(土)",0
+prompt5 BYTE "雙子座(風)",0
+prompt6 BYTE "巨蟹座(水)",0
+prompt7 BYTE "獅子座(火)",0
+prompt8 BYTE "處女座(土)",0
+prompt9 BYTE "天秤座(風)",0
+prompt10 BYTE "天蠍座(水)",0
+prompt11 BYTE "射手座(火)",0
+prompt12 BYTE "魔羯座(土)",0
+success BYTE "SUCCESS!!",0
+afterLevel1 BYTE "你總共翻牌",0
+afterLevel2 BYTE "次",0
+gameOver BYTE "遊戲結束!!",0
+rank BYTE "rank : ",0
+
+month DWORD ?		;玩家輸入月份
+day DWORD ?			;玩家輸入日期
+color DWORD ?		;判斷星座的顏色
+action BYTE ?		;玩家按下的按鍵
+maxRow BYTE ?		;牌組最大的列數
+maxCol BYTE ?		;牌組最大的行數
+storeX BYTE 4
+storeY BYTE 0
+preX BYTE 4
+preY BYTE 0
+
+startX1 BYTE 4
+startX2 BYTE 10
+startX3 BYTE 16
+startX4 BYTE 22
+startY1 BYTE 0 
+startY2 BYTE 6
+startY3 BYTE 12
+startY4 BYTE 18
+startY5 BYTE 24
+startY6 BYTE 30  
+
+num BYTE 24 DUP(?)
+ifuse BYTE 24 DUP(0)
+time0 DWORD 0
+time1 DWORD 0
+time2 DWORD 0
+time3 DWORD 0
+time4 DWORD 0
+time5 DWORD 0
+time6 DWORD 0
+time7 DWORD 0
+time8 DWORD 0
+time9 DWORD 0
+time10 DWORD 0
+time11 DWORD 0
+
+pairCount DWORD ?
+FirstSelect DWORD 0
+value1 BYTE ?
+level  BYTE 1
+flopTime DWORD 0
+totalFlop DWORD 0
+great BYTE "神人",0
+middle BYTE "普通人",0
+poor BYTE "廢物",0
+storemonth DWORD ?
+
+.code
+main PROC
+	call Randomize
+
+	call GameStart
+	mov dh,20
+	mov dl,50
+	call Gotoxy
+	call WaitMsg
+	call Clrscr
+
+	mov dh,0
+	mov dl,0
+	call Gotoxy
+
+	mov edx,OFFSET sprompt1
+	call WriteString
+	call ReadDec
+	mov month,eax
+	mov edx,OFFSET sprompt2
+	call WriteString
+	call ReadDec
+	mov day,eax
+
+	call Constellation
+	call Crlf
+
+	call drawLevel1
+	call InitNum
+	mov level,1
+	mov dh,4
+	mov dl,0
+	call Gotoxy
+.WHILE pairCount != 0
+	call move
+.ENDW
+	call PassWork
+
+	mov storeX,4
+	mov storeY,0
+	call drawLevel2
+	call InitNum
+	mov level,2
+	mov dh,4
+	mov dl,0
+	call Gotoxy
+.WHILE pairCount != 0
+	call move
+.ENDW
+	call PassWork
+
+	mov storeX,4
+	mov storeY,0
+	call drawLevel3
+	call InitNum
+	mov level,3
+	mov dh,4
+	mov dl,0
+	call Gotoxy
+.WHILE pairCount != 0
+	call move
+.ENDW
+	call PassWork
+
+	mov dh,12
+	mov dl,34
+	call Gotoxy
+	mov eax,yellow+(black*16)
+	call SetTextColor
+	mov edx,OFFSET gameOver
+	call WriteString
+	mov dh,13
+	mov dl,34
+	call Gotoxy
+	mov edx,OFFSET rank
+	call WriteString
+	mov eax,lightCyan+(black*16)
+	call SetTextColor
+	.IF totalFlop<=64
+		mov edx,OFFSET great
+		call WriteString
+	.ELSEIF totalFlop<=78
+		mov edx,OFFSET middle
+		call WriteString
+	.ELSE
+		mov edx,OFFSET poor
+		call WriteString
+	.ENDIF
+	mov eax,white+(black*16)
+	call SetTextColor
+	mov dh,20
+	mov dl,25
+	call Gotoxy
+	call Crlf
+	exit
+main ENDP
+
+move PROC 					;偵測玩家動作並處理
+press: mov eax,10			; create 10 ms delay
+	call Delay
+	call ReadKey			; check for key
+	jz press				; repeat if no key
+	mov action,al			; save the character
+
+	mov dh,storeX
+	mov dl,storeY
+	.IF action=='w'
+		.IF dh>4
+			sub dh,6
+			mov storeX,dh
+		.ENDIF
+		call select
+	.ELSEIF action=='s'
+		.IF dh<maxRow
+			add dh,6
+			mov storeX,dh
+		.ENDIF
+		call select
+	.ELSEIF action=='a'
+		.IF dl>0
+			sub dl,6
+			mov storeY,dl
+		.ENDIF
+		call select
+	.ELSEIF action=='d'
+		.IF dl<maxCol
+			add dl,6
+			mov storeY,dl
+		.ENDIF
+		call select
+	.ELSEIF action==' '
+		call NoRepeat
+		.IF eax==0
+			jmp canFlop
+		.ELSE 
+			jmp repeatSelect
+		.ENDIF
+canFlop:
+		.IF FirstSelect != 1			;第一張牌還沒翻
+			mov bl,storeX
+			mov preX,bl					;記錄前一次的座標x
+			mov bl,storeY
+			mov preY,bl					;記錄前一次的座標y
+			.IF level==1
+				call GetArrNumLevel1	;取得座標對應的陣列內容(關卡1)
+			.ELSEIF level==2
+				call GetArrNumLevel2	;取得座標對應的陣列內容(關卡2)
+			.ELSEIF level==3
+				call GetArrNumLevel3	;取得座標對應的陣列內容(關卡3)
+			.ENDIF
+			mov value1,bl
+			call Image					;印出對應陣列數字
+			mov FirstSelect,1
+		.ELSE							;翻第二張牌並檢查是否配對
+			.IF level==1
+				call GetArrNumLevel1	;取得座標對應的陣列內容(關卡1)
+			.ELSEIF level==2
+				call GetArrNumLevel2	;取得座標對應的陣列內容(關卡2)
+			.ELSEIF level==3
+				call GetArrNumLevel3	;取得座標對應的陣列內容(關卡3)
+			.ENDIF
+			call Image					;印出對應陣列數字
+			.IF value1==bl				;如果配對,pairCount減1,印出OK
+				dec pairCount
+				call IfMatch
+			.ELSE
+				mov eax,2000
+				call Delay
+				call ClearImage			;如果沒有配對,消除兩個數字
+			.ENDIF
+			mov FirstSelect,0
+		.ENDIF
+		inc flopTime
+		inc totalFlop
+	.ENDIF
+repeatSelect:
+	ret
+move ENDP
+ 
+GameStart PROC
+	mov eax,yellow+(lightgreen*16)
+	call SetTextColor
+	mov eax,' '
+	mov dh,4
+	mov dl,8
+	mov ecx,8
+C1:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop C1
+	mov dh,5
+	mov dl,8
+	mov ecx,4
+C2:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop C2
+	mov dh,8
+	mov dl,10
+	mov ecx,6
+C3:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop C3
+
+	mov dh,4
+	mov dl,22
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,5
+	mov dl,20
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,5
+	mov dl,24
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,6
+	mov dl,19
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,6
+	mov dl,25
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,7
+	mov dl,19
+	mov ecx,8
+A1:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop A1
+	mov dh,8
+	mov dl,19
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,8
+	mov dl,25
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+
+	mov dh,4
+	mov dl,33
+	mov ecx,6
+R1:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop R1
+	dec dl
+	inc dh
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	mov ecx,6
+R2:
+	call Gotoxy
+	call WriteChar
+	dec dl
+	loop R2
+	mov dh,4
+	mov dl,31
+	mov ecx,5
+R3:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop R3
+	mov dh,7
+	mov dl,36
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	inc dl
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	
+	mov dh,4
+	mov dl,43
+	mov ecx,8
+D1:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop D1
+	dec dl
+	inc dh
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	inc dl
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	call Gotoxy
+	call WriteChar
+	dec dl
+	call Gotoxy
+	call WriteChar
+	inc dh
+	call Gotoxy
+	mov ecx,8
+D2:
+	call Gotoxy
+	call WriteChar
+	dec dl
+	loop D2
+	inc dl
+	dec dh
+	mov ecx,3
+D3:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	dec dh
+	loop D3
+
+	mov dh,10
+	mov dl,31
+	mov ecx,8
+G1:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop G1
+	mov dh,11
+	mov dl,31
+	mov ecx,4
+G2:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop G2
+	mov dh,14
+	mov dl,33
+	mov ecx,6
+G3:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop G3
+	mov dh,12
+	mov dl,36
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	inc dh
+	inc dl
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+
+	mov dh,10
+	mov dl,45
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,11
+	mov dl,43
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,11
+	mov dl,47
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,12
+	mov dl,42
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,12
+	mov dl,48
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,13
+	mov dl,42
+	mov ecx,8
+A2:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop A2
+	mov dh,14
+	mov dl,42
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	mov dh,14
+	mov dl,48
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+
+	mov dh,10
+	mov dl,56
+	call Gotoxy
+	call WriteChar
+	mov dh,10
+	mov dl,54
+	mov ecx,5
+M1:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop M1
+	mov dh,11
+	mov dl,56
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	inc dl
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	inc dl
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	dec dh
+	inc dl
+	inc dl
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	dec dh
+	inc dl
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	dec dh
+	inc dl
+	call Gotoxy
+	call WriteChar
+	inc dl
+	mov ecx,5
+M2:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop M2
+	call Crlf
+
+	mov dh,10
+	mov dl,69
+	mov ecx,5
+E1:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop E1
+	mov dh,10
+	mov dl,71
+	mov ecx,6
+E2:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop E2
+	mov dh,14
+	mov dl,71
+	mov ecx,6
+E3:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop E3
+	mov dh,12
+	mov dl,71
+	mov ecx,6
+E4:
+	call Gotoxy
+	call WriteChar
+	inc dl
+	loop E4
+
+	mov eax,white+(lightBlue*16)
+	call SetTextColor
+	mov dh,10
+	mov dl,8
+	mov eax,' '
+	mov ecx,5
+CARD1:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop CARD1
+	mov eax,white+(yellow*16)
+	call SetTextColor
+	mov dh,12
+	mov dl,11
+	call Gotoxy
+	mov eax,' '
+	call WriteChar
+	mov dh,11
+	mov dl,9
+	call Gotoxy
+	call WriteChar
+	mov dh,11
+	mov dl,13
+	call Gotoxy
+	call WriteChar
+	mov dh,13
+	mov dl,13
+	call Gotoxy
+	call WriteChar
+	mov dh,13
+	mov dl,9
+	call Gotoxy
+	call WriteChar
+
+	mov eax,white+(cyan*16)
+	call SetTextColor
+	mov dh,4
+	mov dl,69
+	mov eax,' '
+	mov ecx,5
+CARD2:
+	call Gotoxy
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	call WriteChar
+	inc dh
+	loop CARD2
+	mov eax,white+(white*16)
+	call SetTextColor
+	mov eax,' '
+	mov dh,5
+	mov dl,70
+	call Gotoxy
+	call WriteChar
+	mov dh,5
+	mov dl,74
+	call Gotoxy
+	call WriteChar
+	mov dh,7
+	mov dl,74
+	call Gotoxy
+	call WriteChar
+	mov dh,7
+	mov dl,70
+	call Gotoxy
+	call WriteChar
+	mov eax,white+(black*16)
+	call SetTextColor
+	ret
+GameStart ENDP
+
+
+Constellation PROC
+	.IF month==1
+		.IF day<20
+			mov edx,OFFSET prompt12
+			call WriteString
+			mov eax,12
+		.ELSE
+			mov edx,OFFSET prompt1
+			call WriteString
+			mov eax,1
+		.ENDIF
+	.ELSEIF month==2
+		.IF day<19
+			mov edx,OFFSET prompt1
+			call WriteString
+			mov eax,1
+		.ELSE
+			mov edx,OFFSET prompt2
+			call WriteString
+			mov eax,2
+		.ENDIF
+	.ELSEIF month==3
+		.IF day<21
+			mov edx,OFFSET prompt2
+			call WriteString
+			mov eax,2
+		.ELSE
+			mov edx,OFFSET prompt3
+			call WriteString
+			mov eax,3
+		.ENDIF
+	.ELSEIF month==4
+		.IF day<20
+			mov edx,OFFSET prompt3
+			call WriteString
+			mov eax,3
+		.ELSE
+			mov edx,OFFSET prompt4
+			call WriteString
+			mov eax,4
+		.ENDIF
+	.ELSEIF month==5
+		.IF day<21
+			mov edx,OFFSET prompt4
+			call WriteString
+			mov eax,4
+		.ELSE
+			mov edx,OFFSET prompt5
+			call WriteString
+			mov eax,5
+		.ENDIF
+	.ELSEIF month==6
+		.IF day<22
+			mov edx,OFFSET prompt5
+			call WriteString
+			mov eax,5
+		.ELSE
+			mov edx,OFFSET prompt6
+			call WriteString
+			mov eax,6
+		.ENDIF
+	.ELSEIF month==7
+		.IF day<23
+			mov edx,OFFSET prompt6
+			call WriteString
+			mov eax,6
+		.ELSE
+			mov edx,OFFSET prompt7
+			call WriteString
+			mov eax,7
+		.ENDIF
+	.ELSEIF month==8
+		.IF day<23
+			mov edx,OFFSET prompt7
+			call WriteString
+			mov eax,7
+	    .ELSE
+		    mov edx,OFFSET prompt8
+		    call WriteString
+		    mov eax,8	
+	    .ENDIF
+	.ELSEIF month==9
+		.IF day<23
+			mov edx,OFFSET prompt8
+			call WriteString
+			mov eax,8
+			
+		.ELSE
+			mov edx,OFFSET prompt9
+			call WriteString
+			mov eax,9
+		.ENDIF
+	.ELSEIF month==10
+		.IF day<24
+			mov edx,OFFSET prompt9
+			call WriteString
+			mov eax,9
+		.ELSE
+			mov edx,OFFSET prompt10
+			call WriteString
+			mov eax,10
+		.ENDIF
+	.ELSEIF month==11
+		.IF day<23
+			mov edx,OFFSET prompt10
+			call WriteString
+			mov eax,10
+		.ELSE
+			mov edx,OFFSET prompt11
+			call WriteString
+			mov eax,11
+		.ENDIF
+	.ELSEIF month==12
+		.IF day<22
+			mov edx,OFFSET prompt11
+			call WriteString
+			mov eax,11
+		.ELSE
+			mov edx,OFFSET prompt12
+			call WriteString
+			mov eax,12
+		.ENDIF
+	.ENDIF
+	mov storemonth,eax
+	ret
+Constellation ENDP
+
+drawLevel1 PROC
+	.IF (storemonth==3) || (storemonth==7) || (storemonth==11)
+		mov color,white+(red*16)
+	.ELSEIF (storemonth==2) || (storemonth==6) || (storemonth==10)
+		mov color,white+(lightBlue*16)
+	.ELSEIF (storemonth==4) || (storemonth==8) || (storemonth==12)
+		mov color,white+(brown*16)
+	.ELSE 
+		mov color,white+(green*16)
+	.ENDIF
+
+	mov eax,color
+	call SetTextColor
+
+	mov dh,startX1
+	mov dl,startY1
+	call rect
+
+	mov dh,startX1
+	mov dl,startY2
+	call rect
+
+	mov dh,startX1
+	mov dl,startY3
+	call rect
+
+	mov dh,startX2
+	mov dl,startY1
+	call rect
+
+	mov dh,startX2
+	mov dl,startY2
+	call rect
+
+	mov dh,startX2
+	mov dl,startY3
+	call rect
+
+	mov maxRow,10
+	mov maxCol,12
+	mov pairCount,3
+	mov ecx,6			;給InitNum產生數字的次數
+	ret
+drawLevel1 ENDP
+
+drawLevel2 PROC
+	call drawLevel1
+
+	mov dh,startX1
+	mov dl,startY4
+	call rect
+
+	mov dh,startX2
+	mov dl,startY4
+	call rect
+
+	mov dh,startX3
+	mov dl,startY1
+	call rect
+
+	mov dh,startX3
+	mov dl,startY2
+	call rect
+
+	mov dh,startX3
+	mov dl,startY3
+	call rect
+
+	mov dh,startX3
+	mov dl,startY4
+	call rect
+
+	mov maxRow,16
+	mov maxCol,18
+	mov pairCount,6
+	mov ecx,12			;給InitNum產生數字的次數
+	ret
+drawLevel2 ENDP
+
+drawLevel3 PROC
+	call drawLevel2
+
+	mov dh,startX1
+	mov dl,startY5
+	call rect
+
+	mov dh,startX1
+	mov dl,startY6
+	call rect
+
+	mov dh,startX2
+	mov dl,startY5
+	call rect
+
+	mov dh,startX2
+	mov dl,startY6
+	call rect
+
+	mov dh,startX3
+	mov dl,startY5
+	call rect
+
+	mov dh,startX3
+	mov dl,startY6
+	call rect
+
+	mov dh,startX4
+	mov dl,startY1
+	call rect
+
+	mov dh,startX4
+	mov dl,startY2
+	call rect
+
+	mov dh,startX4
+	mov dl,startY3
+	call rect
+	
+	mov dh,startX4
+	mov dl,startY4
+	call rect
+	
+	mov dh,startX4
+	mov dl,startY5
+	call rect
+	
+	mov dh,startX4
+	mov dl,startY6
+	call rect
+
+	mov maxRow,22
+	mov maxCol,30
+	mov pairCount,12
+	mov ecx,24			;給InitNum產生數字的次數
+	ret
+drawLevel3 ENDP
+
+rect PROC
+	mov ecx,5
+L1:
+	push ecx
+	mov ecx,5
+L2:
+	call Gotoxy
+	mov eax,' '
+	call WriteChar
+	inc dl
+	loop L2
+
+	sub dl,5
+	inc dh
+	pop ecx
+	loop L1
+	ret
+rect ENDP
+
+select PROC
+	mov dh,storeX
+	mov dl,storeY
+	call Gotoxy
+	ret
+select ENDP
+
+Zero PROC
+	mov ecx,3
+	mov dh,storeX
+	mov dl,storeY
+	inc dl
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	inc dh
+	mov ecx,3
+L2:
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	add dh,1
+	loop L2
+	
+	mov ecx,3
+	dec dl
+L3:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L3
+
+	dec dh
+	mov ecx,3
+L4:
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	dec dh
+	loop L4
+	ret
+Zero ENDP
+
+One PROC
+	mov ecx,5
+	mov dh,storeX
+	mov dl,storeY
+	add dl,4
+L1:
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	loop L1
+	ret
+One ENDP
+
+Two PROC
+	mov ecx,3
+	mov dh,storeX
+	mov dl,storeY
+	inc dl
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	mov ecx,3
+	dec dl
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L2
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	mov ecx,3
+	inc dl
+L3:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L3
+	ret
+Two ENDP
+
+Three PROC
+	mov ecx,4
+	mov dh,storeX
+	mov dl,storeY
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+
+	inc dh
+	mov ecx,4
+	dec dl
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L2
+
+	add dl,5
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+
+	inc dh
+	dec dl
+	mov ecx,4
+L3:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L3
+	ret
+Three ENDP
+
+Four PROC
+	mov dh,storeX
+	mov dl,storeY
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	call Gotoxy
+	call WriteChar
+	mov ecx,3 
+	inc dh
+	call Gotoxy
+	mov eax,' '
+	call WriteChar
+L1:
+	mov eax,'*'
+	call WriteChar
+	loop L1
+	mov dh,storeX
+	mov dl,storeY
+	add dl,4
+	mov ecx,2
+L2:
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	loop L2
+
+	inc dh
+	mov ecx,2
+L3:
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	loop L3
+	ret
+Four ENDP
+
+Five PROC
+	mov ecx,3
+	mov dh,storeX
+	mov dl,storeY
+	inc dl
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	mov dh,storeX
+	mov dl,storeY
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	inc dl
+	mov ecx,3
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L2
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	dec dl
+	mov ecx,3
+L3:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L3
+	ret
+Five ENDP
+
+Six PROC
+	mov ecx,3
+	mov dh,storeX
+	mov dl,storeY
+	inc dl
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	mov dh,storeX
+	mov dl,storeY
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+
+	inc dh
+	inc dl
+	mov ecx,3
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L2
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+
+	inc dh
+	dec dl
+	mov ecx,3
+L3:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L3
+
+	dec dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	ret
+Six ENDP
+
+Seven PROC
+	mov ecx,5
+	mov dh,storeX
+	mov dl,storeY
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+	
+	dec dl
+	inc dh
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+
+	mov ecx,3
+	inc dh
+	dec dl
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dh
+	dec dl
+	loop L2
+	ret
+Seven ENDP
+
+Eight PROC
+	mov ecx,3
+	mov dh,storeX
+	mov dl,storeY
+	inc dl
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	dec dl
+	mov ecx,3
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L2
+
+	dec dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	add dh,2
+	call Gotoxy
+	call WriteChar
+
+	mov ecx,3
+	inc dh
+	inc dl
+L3:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L3
+
+	dec dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	ret
+Eight ENDP
+
+Nine PROC
+	mov ecx,3
+	mov dh,storeX
+	mov dl,storeY
+	inc dl
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	mov dh,storeX
+	mov dl,storeY
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	inc dl
+	mov ecx,3
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L2
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	dec dl
+	mov ecx,3
+L3:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	dec dl
+	loop L3
+
+	mov dh,storeX
+	mov dl,storeY
+	call Gotoxy
+	add dl,4
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	ret
+Nine ENDP
+
+Rletter PROC
+	mov dh,storeX
+	mov dl,storeY
+	inc dl
+	mov ecx,3
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	sub dl,4
+	call Gotoxy
+	call WriteChar
+
+	inc dh
+	inc dl
+	mov ecx,3
+L2:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L2
+
+	sub dl,4
+	inc dh
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	call Gotoxy
+	call WriteChar
+	add dl,4
+	call Gotoxy
+	mov eax,'\'
+	call WriteChar
+	dec dh
+	sub dl,2
+	call Gotoxy
+	call WriteChar
+	ret
+Rletter ENDP
+
+Tletter PROC
+	mov dh,storeX
+	mov dl,storeY
+	mov ecx,5
+L1:
+	call Gotoxy
+	mov eax,'*'
+	call WriteChar
+	inc dl
+	loop L1
+
+	sub dl,3
+	inc dh
+	mov ecx,4
+L2:
+	call Gotoxy
+	mov eax,'|'
+	call WriteChar
+	inc dh
+	loop L2
+	ret
+Tletter ENDP
+
+InitNum PROC        
+	mov esi,OFFSET num
+L1:                
+	mov eax,pairCount         
+	call RandomRange
+	call NoExceed
+    loop L1
+InitNum ENDP
+
+NoExceed PROC
+	.IF eax==0
+		.IF time0!=2
+			mov [esi],al
+			inc esi
+			inc time0
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==1
+		.IF time1!=2
+			mov [esi],al
+			inc esi
+			inc time1
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==2
+		.IF time2!=2
+			mov [esi],al
+			inc esi
+			inc time2
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==3
+		.IF time3!=2
+			mov [esi],al
+			inc esi
+			inc time3
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==4
+		.IF time4!=2
+			mov [esi],al
+			inc esi
+			inc time4
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==5
+		.IF time5!=2
+			mov [esi],al
+			inc esi
+			inc time5
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==6
+		.IF time6!=2
+			mov [esi],al
+			inc esi
+			inc time6
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==7
+		.IF time7!=2
+			mov [esi],al
+			inc esi
+			inc time7
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==8
+		.IF time8!=2
+			mov [esi],al
+			inc esi
+			inc time8
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==9
+		.IF time9!=2
+			mov [esi],al
+			inc esi
+			inc time9
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==10
+		.IF time10!=2
+			mov [esi],al
+			inc esi
+			inc time10
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ELSEIF eax==11
+		.IF time11!=2
+			mov [esi],al
+			inc esi
+			inc time11
+		.ELSE
+			inc ecx
+		.ENDIF
+	.ENDIF
+	ret
+NoExceed ENDP
+
+GetArrNumLevel1 PROC			;取出對應座標的陣列內容
+	.IF (storeX==4) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi]
+	.ELSEIF (storeX==4) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+1]
+	.ELSEIF (storeX==4) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+2]
+	.ELSEIF (storeX==10) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+3]
+	.ELSEIF (storeX==10) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+4]
+	.ELSEIF (storeX==10) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+5]
+	.ENDIF
+	ret
+GetArrNumLevel1 ENDP
+
+GetArrNumLevel2 PROC
+	.IF (storeX==4) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi]
+	.ELSEIF (storeX==4) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+1]
+	.ELSEIF (storeX==4) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+2]
+	.ELSEIF (storeX==4) && (storeY==18)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+3]
+	.ELSEIF (storeX==10) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+4]
+	.ELSEIF (storeX==10) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+5]
+	.ELSEIF (storeX==10) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+6]
+	.ELSEIF (storeX==10) && (storeY==18)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+7]
+	.ELSEIF (storeX==16) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+8]
+	.ELSEIF (storeX==16) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+9]
+	.ELSEIF (storeX==16) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+10]
+	.ELSEIF (storeX==16) && (storeY==18)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+11]
+	.ENDIF
+	ret
+GetArrNumLevel2 ENDP
+
+GetArrNumLevel3 PROC
+	.IF (storeX==4) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi]
+	.ELSEIF (storeX==4) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+1]
+	.ELSEIF (storeX==4) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+2]
+	.ELSEIF (storeX==4) && (storeY==18)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+3]
+	.ELSEIF (storeX==4) && (storeY==24)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+4]
+	.ELSEIF (storeX==4) && (storeY==30)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+5]
+	.ELSEIF (storeX==10) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+6]
+	.ELSEIF (storeX==10) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+7]
+	.ELSEIF (storeX==10) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+8]
+	.ELSEIF (storeX==10) && (storeY==18)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+9]
+	.ELSEIF (storeX==10) && (storeY==24)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+10]
+	.ELSEIF (storeX==10) && (storeY==30)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+11]
+	.ELSEIF (storeX==16) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+12]
+	.ELSEIF (storeX==16) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+13]
+	.ELSEIF (storeX==16) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+14]
+	.ELSEIF (storeX==16) && (storeY==18)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+15]
+	.ELSEIF (storeX==16) && (storeY==24)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+16]
+	.ELSEIF (storeX==16) && (storeY==30)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+17]
+	.ELSEIF (storeX==22) && (storeY==0)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+18]
+	.ELSEIF (storeX==22) && (storeY==6)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+19]
+	.ELSEIF (storeX==22) && (storeY==12)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+20]
+	.ELSEIF (storeX==22) && (storeY==18)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+21]
+	.ELSEIF (storeX==22) && (storeY==24)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+22]
+	.ELSEIF (storeX==22) && (storeY==30)
+		mov esi,OFFSET num
+		mov bl,byte ptr [esi+23]
+	.ENDIF
+	ret
+GetArrNumLevel3 ENDP
+
+Image PROC			;印出對應內容圖案
+	.IF bl==0
+		call Zero
+	.ELSEIF bl==1
+		call One
+	.ELSEIF bl==2
+		call Two
+	.ELSEIF bl==3
+		call Three
+	.ELSEIF bl==4
+		call Four
+	.ELSEIF bl==5
+		call Five
+	.ELSEIF bl==6
+		call Six
+	.ELSEIF bl==7
+		call Seven
+	.ELSEIF bl==8
+		call Eight
+	.ELSEIF bl==9
+		call Nine
+	.ELSEIF bl==10
+		call Rletter
+	.ELSEIF bl==11
+		call Tletter
+	.ENDIF
+	ret
+Image ENDP
+
+ClearImage PROC
+	mov ecx,5
+	mov dh,preX
+	mov dl,preY
+L1:
+	push ecx
+	mov ecx,5
+L2:
+	call Gotoxy
+	mov eax,' '
+	call WriteChar
+	inc dl
+	loop L2
+
+	sub dl,5
+	inc dh
+	pop ecx
+	loop L1
+
+	mov ecx,5
+	mov dh,storeX
+	mov dl,storeY
+L3:
+	push ecx
+	mov ecx,5
+L4:
+	call Gotoxy
+	mov eax,' '
+	call WriteChar
+	inc dl
+	loop L4
+
+	sub dl,5
+	inc dh
+	pop ecx
+	loop L3
+	;兩張牌沒有配對,要清掉用過的標記
+	mov esi,OFFSET ifuse							;(目前的位置)				
+	.IF (storeX==4) && (storeY==0)
+		mov byte ptr [esi],0
+	.ELSEIF (storeX==4) && (storeY==6)
+		mov byte ptr [esi+1],0
+	.ELSEIF (storeX==4) && (storeY==12)
+		mov byte ptr [esi+2],0
+	.ELSEIF (storeX==4) && (storeY==18)
+		mov byte ptr [esi+3],0
+	.ELSEIF (storeX==4) && (storeY==24)
+		mov byte ptr [esi+4],0
+	.ELSEIF (storeX==4) && (storeY==30)
+		mov byte ptr [esi+5],0
+	.ELSEIF (storeX==10) && (storeY==0)
+		mov byte ptr [esi+6],0
+	.ELSEIF (storeX==10) && (storeY==6)
+		mov byte ptr [esi+7],0
+	.ELSEIF (storeX==10) && (storeY==12)
+		mov byte ptr [esi+8],0
+	.ELSEIF (storeX==10) && (storeY==18)
+		mov byte ptr [esi+9],0
+	.ELSEIF (storeX==10) && (storeY==24)
+		mov byte ptr [esi+10],0
+	.ELSEIF (storeX==10) && (storeY==30)
+		mov byte ptr [esi+11],0
+	.ELSEIF (storeX==16) && (storeY==0)
+		mov byte ptr [esi+12],0
+	.ELSEIF (storeX==16) && (storeY==6)
+		mov byte ptr [esi+13],0
+	.ELSEIF (storeX==16) && (storeY==12)
+		mov byte ptr [esi+14],0
+	.ELSEIF (storeX==16) && (storeY==18)
+		mov byte ptr [esi+15],0
+	.ELSEIF (storeX==16) && (storeY==24)
+		mov byte ptr [esi+16],0
+	.ELSEIF (storeX==16) && (storeY==30)
+		mov byte ptr [esi+17],0
+	.ELSEIF (storeX==22) && (storeY==0)
+		mov byte ptr [esi+18],0
+	.ELSEIF (storeX==22) && (storeY==6)
+		mov byte ptr [esi+19],0
+	.ELSEIF (storeX==22) && (storeY==12)
+		mov byte ptr [esi+20],0
+	.ELSEIF (storeX==22) && (storeY==18)
+		mov byte ptr [esi+21],0
+	.ELSEIF (storeX==22) && (storeY==24)
+		mov byte ptr [esi+22],0
+	.ELSEIF (storeX==22) && (storeY==30)
+		mov byte ptr [esi+23],0
+	.ENDIF
+											
+	.IF (preX==4) && (preY==0)						;(之前的位置)
+		mov byte ptr [esi],0
+	.ELSEIF (preX==4) && (preY==6)
+		mov byte ptr [esi+1],0
+	.ELSEIF (preX==4) && (preY==12)
+		mov byte ptr [esi+2],0
+	.ELSEIF (preX==4) && (preY==18)
+		mov byte ptr [esi+3],0
+	.ELSEIF (preX==4) && (preY==24)
+		mov byte ptr [esi+4],0
+	.ELSEIF (preX==4) && (preY==30)
+		mov byte ptr [esi+5],0
+	.ELSEIF (preX==10) && (preY==0)
+		mov byte ptr [esi+6],0
+	.ELSEIF (preX==10) && (preY==6)
+		mov byte ptr [esi+7],0
+	.ELSEIF (preX==10) && (preY==12)
+		mov byte ptr [esi+8],0
+	.ELSEIF (preX==10) && (preY==18)
+		mov byte ptr [esi+9],0
+	.ELSEIF (preX==10) && (preY==24)
+		mov byte ptr [esi+10],0
+	.ELSEIF (preX==10) && (preY==30)
+		mov byte ptr [esi+11],0
+	.ELSEIF (preX==16) && (preY==0)
+		mov byte ptr [esi+12],0
+	.ELSEIF (preX==16) && (preY==6)
+		mov byte ptr [esi+13],0
+	.ELSEIF (preX==16) && (preY==12)
+		mov byte ptr [esi+14],0
+	.ELSEIF (preX==16) && (preY==18)
+		mov byte ptr [esi+15],0
+	.ELSEIF (preX==16) && (preY==24)
+		mov byte ptr [esi+16],0
+	.ELSEIF (preX==16) && (preY==30)
+		mov byte ptr [esi+17],0
+	.ELSEIF (preX==22) && (preY==0)
+		mov byte ptr [esi+18],0
+	.ELSEIF (preX==22) && (preY==6)
+		mov byte ptr [esi+19],0
+	.ELSEIF (preX==22) && (preY==12)
+		mov byte ptr [esi+20],0
+	.ELSEIF (preX==22) && (preY==18)
+		mov byte ptr [esi+21],0
+	.ELSEIF (preX==22) && (preY==24)
+		mov byte ptr [esi+22],0
+	.ELSEIF (preX==22) && (preY==30)
+		mov byte ptr [esi+23],0
+	.ENDIF
+	ret
+ClearImage ENDP
+
+IfMatch PROC
+    mov dh,0
+	mov dl,20
+	call Gotoxy
+	mov eax,'O'
+	call WriteChar
+	mov eax,'K'
+	call WriteChar
+	mov eax,2000
+	call Delay
+	call Gotoxy
+	mov eax,' '
+	call WriteChar
+	call WriteChar
+	ret
+IfMatch ENDP
+
+PassWork PROC
+	mov dh,0
+	mov dl,20
+	call Gotoxy
+	mov eax,yellow+(black*16)
+	call SetTextColor
+	mov edx,OFFSET success
+	call WriteString
+	mov eax,3000
+	call Delay
+	mov eax,white+(black*16)
+	call SetTextColor
+	call Clrscr
+	
+	mov dh,4
+	mov dl,0
+	call Gotoxy
+	mov edx,OFFSET afterLevel1
+	call WriteString
+	mov eax,' '
+	call WriteChar
+	mov eax,yellow+(black*16)
+	call SetTextColor
+	mov eax,flopTime
+	call WriteDec
+	mov eax,' '
+	call WriteChar
+	mov eax,white+(black*16)
+	call SetTextColor
+	mov edx,OFFSET afterLevel2
+	call WriteString
+	mov eax,3000
+	call Delay
+	call Clrscr
+
+	mov flopTime,0
+	mov time0,0
+	mov time1,0
+	mov time2,0
+	mov time3,0
+	mov time4,0
+	mov time5,0
+	mov time6,0
+	mov time7,0
+	mov time8,0
+	mov time9,0
+	mov time10,0
+	mov time11,0
+
+	mov ecx,24
+	mov esi,OFFSET ifuse
+L1:
+	mov byte ptr [esi],0
+	inc esi
+	loop L1
+	ret
+PassWork ENDP
+
+NoRepeat PROC
+	mov esi,OFFSET ifuse
+	.IF (storeX==4) && (storeY==0) && (byte ptr [esi]==0)
+		mov byte ptr [esi],1
+		mov eax,0
+	.ELSEIF (storeX==4) && (storeY==6) && (byte ptr [esi+1]==0)
+		mov byte ptr [esi+1],1
+		mov eax,0
+	.ELSEIF (storeX==4) && (storeY==12) && (byte ptr [esi+2]==0)
+		mov byte ptr [esi+2],1
+		mov eax,0
+	.ELSEIF (storeX==4) && (storeY==18) && (byte ptr [esi+3]==0)
+		mov byte ptr [esi+3],1
+		mov eax,0
+	.ELSEIF (storeX==4) && (storeY==24) && (byte ptr [esi+4]==0)
+		mov byte ptr [esi+4],1
+		mov eax,0
+	.ELSEIF (storeX==4) && (storeY==30) && (byte ptr [esi+5]==0)
+		mov byte ptr [esi+5],1
+		mov eax,0
+	.ELSEIF (storeX==10) && (storeY==0) && (byte ptr [esi+6]==0)
+		mov byte ptr [esi+6],1
+		mov eax,0
+	.ELSEIF (storeX==10) && (storeY==6) && (byte ptr [esi+7]==0)
+		mov byte ptr [esi+7],1
+		mov eax,0
+	.ELSEIF (storeX==10) && (storeY==12) && (byte ptr [esi+8]==0)
+		mov byte ptr [esi+8],1
+		mov eax,0
+	.ELSEIF (storeX==10) && (storeY==18) && (byte ptr [esi+9]==0)
+		mov byte ptr [esi+9],1
+		mov eax,0
+	.ELSEIF (storeX==10) && (storeY==24) && (byte ptr [esi+10]==0)
+		mov byte ptr [esi+10],1
+		mov eax,0
+	.ELSEIF (storeX==10) && (storeY==30) && (byte ptr [esi+11]==0)
+		mov byte ptr [esi+11],1
+		mov eax,0
+	.ELSEIF (storeX==16) && (storeY==0) && (byte ptr [esi+12]==0)
+		mov byte ptr [esi+12],1
+		mov eax,0
+	.ELSEIF (storeX==16) && (storeY==6) && (byte ptr [esi+13]==0)
+		mov byte ptr [esi+13],1
+		mov eax,0
+	.ELSEIF (storeX==16) && (storeY==12) && (byte ptr [esi+14]==0)
+		mov byte ptr [esi+14],1
+		mov eax,0
+	.ELSEIF (storeX==16) && (storeY==18) && (byte ptr [esi+15]==0)
+		mov byte ptr [esi+15],1
+		mov eax,0
+	.ELSEIF (storeX==16) && (storeY==24) && (byte ptr [esi+16]==0)
+		mov byte ptr [esi+16],1
+		mov eax,0
+	.ELSEIF (storeX==16) && (storeY==30) && (byte ptr [esi+17]==0)
+		mov byte ptr [esi+17],1
+		mov eax,0
+	.ELSEIF (storeX==22) && (storeY==0) && (byte ptr [esi+18]==0)
+		mov byte ptr [esi+18],1
+		mov eax,0
+	.ELSEIF (storeX==22) && (storeY==6) && (byte ptr [esi+19]==0)
+		mov byte ptr [esi+19],1
+		mov eax,0
+	.ELSEIF (storeX==22) && (storeY==12) && (byte ptr [esi+20]==0)
+		mov byte ptr [esi+20],1
+		mov eax,0
+	.ELSEIF (storeX==22) && (storeY==18) && (byte ptr [esi+21]==0)
+		mov byte ptr [esi+21],1
+		mov eax,0
+	.ELSEIF (storeX==22) && (storeY==24) && (byte ptr [esi+22]==0)
+		mov byte ptr [esi+22],1
+		mov eax,0
+	.ELSEIF (storeX==22) && (storeY==30) && (byte ptr [esi+23]==0)
+		mov byte ptr [esi+23],1
+		mov eax,0
+	.ELSE 
+		mov eax,1
+	.ENDIF
+	ret
+NoRepeat ENDP
+END main
